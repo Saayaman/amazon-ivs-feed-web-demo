@@ -2,6 +2,9 @@ video {
   width: 100%;
   height: 100%;
   cursor: pointer;
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 
 canvas {
@@ -24,10 +27,35 @@ canvas {
   align-items: center;
 }
 
-.player-video {
+.player-video-wrapper {
   width: 100%;
   height: 100%;
   z-index: 1;
+
+  display: grid;
+  grid-template-areas: 'prevStream' 
+  'currentStream' 
+  'nextStream';
+  transform: translateY(-100%);
+}
+
+.player-video {
+  width: 100%;
+  height: 100vh;
+  z-index: 1;
+  position: relative
+}
+
+.player-video.currentStream {
+  grid-area: currentStream;
+}
+
+.player-video.nextStream {
+  grid-area: nextStream;
+}
+
+.player-video.prevStream {
+  grid-area: prevStream;
 }
 
 .metadata-toggle {

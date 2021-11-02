@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useMemo, useLayoutEffect } from 'react';
+import throttle from "lodash.throttle";
 
 import Spinner from '../common/Spinner';
 import Button from '../common/Button';
@@ -14,6 +15,7 @@ const Feed = ({ toggleMetadata }) => {
   const { activeStream, nextStream, prevStream, gotoNextStream, gotoPrevStream } =
     useStream();
   const [v1, v2, v3] = [useRef(1), useRef(2), useRef(3)];
+  const playerWrapperRef = useRef();
   const players = [usePlayer(v1), usePlayer(v2), usePlayer(v3)];
   const loadedStreamsMap = useMemo(() => new Map(), []); // key: Player ID (PID), value: loaded stream
   const activePlayer =
@@ -23,6 +25,34 @@ const Feed = ({ toggleMetadata }) => {
     players[0];
 
   const init = useRef(true);
+
+  const handleWheel = (e) => {
+    playerWrapperRef.current.style.transition = "transform 650ms cubic-bezier(0.465, 0.183, 0.153, 0.946)";
+    if(e.deltaY > 0) {
+      console.log("next", e.deltaY);
+      playerWrapperRef.current.style.transform = "translateY(-200%)";
+
+      setTimeout(() => {
+        gotoNextStream();
+        playerWrapperRef.current.style.transition = "unset";
+        if(!activePlayer.loading) {
+          playerWrapperRef.current.style.transform = "translateY(-100%)";
+        }
+      }, 2000);
+    } else {
+      console.log("prev", e.deltaY);
+      playerWrapperRef.current.style.transform = "translateY(0)";
+      setTimeout(() => {
+        gotoPrevStream();
+        playerWrapperRef.current.style.transition = "unset";
+        if(!activePlayer.loading) {
+          playerWrapperRef.current.style.transform = "translateY(-100%)";
+        }
+      }, 2000);
+    }
+  }
+  const onWheelThrottled = useMemo(() => throttle(handleWheel, 2000), []);
+
   useLayoutEffect(() => {
     if (activeStream && nextStream && prevStream) {
       const streams = [activeStream, nextStream, prevStream];
@@ -99,14 +129,19 @@ const Feed = ({ toggleMetadata }) => {
         </span>
       </div>
 
-      <div className="player-video">
+      <div ref={playerWrapperRef} onWheel={onWheelThrottled} className="player-video-wrapper">
         {players.map(({ pid, video, canvas }) => {
-          const style = { display: pid === activePlayer.pid ? 'block' : 'none' };
+          let classN = "";
+          if(loadedStreamsMap.size) {
+            const { id: loadedStreamId } = loadedStreamsMap.get(pid);
+            classN = pid === activePlayer.pid ? "currentStream" : loadedStreamId === nextStream.id ? "nextStream" : "prevStream";
+          }
+          const activeStyle = { display: pid === activePlayer.pid ? 'block' : 'none' };
           return (
-            <React.Fragment key={pid}>
-              <video ref={video} style={style} playsInline muted />;
-              <canvas ref={canvas} style={style} />
-            </React.Fragment>
+            <div className={`player-video ${classN}`} key={pid}>
+              <video ref={video} playsInline muted />;
+              <canvas ref={canvas} style={activeStyle} />
+            </div>
           );
         })}
 
