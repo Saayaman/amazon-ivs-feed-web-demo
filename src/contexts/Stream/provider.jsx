@@ -33,6 +33,7 @@ const StreamProvider = ({ children }) => {
 
   const getStream = useCallback(
     (pos) => {
+      console.log("getStreams", state.streams);
       const len = state.streams.length;
       return state.streams[((pos % len) + len) % len];
     },
@@ -46,6 +47,9 @@ const StreamProvider = ({ children }) => {
   const setActiveStream = useCallback(
     (pos) => {
       const activeStream = getStream(pos);
+
+      console.log("activeStream", activeStream);
+      console.log("streams", state.streams);
       dispatch({
         type: actionTypes.SET_ACTIVE_STREAM,
         activeStream,
