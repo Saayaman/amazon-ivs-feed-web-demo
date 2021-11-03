@@ -6,6 +6,7 @@ const { isPlayerSupported, create, PlayerState, PlayerEventType } = window.IVSPl
 const usePlayer = (video) => {
   const player = useRef(null);
   const pid = useRef(video.current);
+  const [streamUrl, setStreamUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [muted, setMuted] = useState(true);
   const [paused, setPaused] = useState(false);
@@ -21,6 +22,8 @@ const usePlayer = (video) => {
     if (isPlayerSupported) {
       const { ENDED, PLAYING, READY, BUFFERING } = PlayerState;
       const { ERROR } = PlayerEventType;
+      const isPlayerInitialized = !!player.current?.core;
+      const currentState = isPlayerInitialized && player.current.getState();
 
       const renderBlur = () => {
         const can = canvas.current;
@@ -39,9 +42,14 @@ const usePlayer = (video) => {
 
       const onStateChange = () => {
         const newState = player.current.getState();
-        if (newState === PLAYING) renderBlur();
+        setABR(newState !== READY);
         setLoading(newState !== PLAYING);
         setPaused(player.current.isPaused());
+
+        if (newState !== READY) {
+          renderBlur();
+        }
+
         console.log(`Player ${pid.current} State - ${newState}`);
       };
 
@@ -49,29 +57,49 @@ const usePlayer = (video) => {
         console.warn(`Player ${pid.current} Event - ERROR:`, err);
       };
 
-      player.current = create();
-      video.current.crossOrigin = 'anonymous';
-      player.current.attachHTMLVideoElement(video.current);
+      if (isPlayerInitialized && currentState !== PlayerState.READY) {
+        player.current.load(streamUrl);
+      } else {
+        console.log(`Creating Player ${pid.current}`);
+        video.current.removeAttribute('src'); // empty video source
+        video.current.crossOrigin = 'anonymous';
 
-      player.current.addEventListener(READY, onStateChange);
-      player.current.addEventListener(PLAYING, onStateChange);
-      player.current.addEventListener(BUFFERING, onStateChange);
-      player.current.addEventListener(ENDED, onStateChange);
-      player.current.addEventListener(ERROR, onError);
+        player.current = create();
+        player.current.attachHTMLVideoElement(video.current);
+        if (streamUrl) {
+          player.current.load(streamUrl);
+        }
+
+        player.current.addEventListener(READY, onStateChange);
+        player.current.addEventListener(PLAYING, onStateChange);
+        player.current.addEventListener(BUFFERING, onStateChange);
+        player.current.addEventListener(ENDED, onStateChange);
+        player.current.addEventListener(ERROR, onError);
+      }
 
       return () => {
-        player.current?.removeEventListener(READY, onStateChange);
-        player.current?.removeEventListener(PLAYING, onStateChange);
-        player.current?.removeEventListener(BUFFERING, onStateChange);
-        player.current?.removeEventListener(ENDED, onStateChange);
-        player.current?.removeEventListener(ERROR, onError);
+        if (player.current?.getState() === PlayerState.READY) {
+          player.current?.removeEventListener(READY, onStateChange);
+          player.current?.removeEventListener(PLAYING, onStateChange);
+          player.current?.removeEventListener(BUFFERING, onStateChange);
+          player.current?.removeEventListener(ENDED, onStateChange);
+          player.current?.removeEventListener(ERROR, onError);
+          player.current.delete();
+        }
       };
     }
-  }, [video]);
+  }, [video, streamUrl]);
 
-  const preload = (playbackUrl) => {
-    player.current.pause();
-    player.current.load(playbackUrl);
+  const preload = (playbackUrl, startPlayback = false) => {
+    setStreamUrl(playbackUrl);
+
+    if (startPlayback) {
+      setABR(true);
+      player.current.play();
+    } else {
+      player.current.pause();
+      setABR(false);
+    }
   };
 
   const toggleMute = () => {
@@ -90,18 +118,33 @@ const usePlayer = (video) => {
   };
 
   const setABR = (enable) => {
-    if (typeof enable === 'boolean') {
-      const isAbrEnabled = player.current.isAutoQualityMode();
+    const isAbrEnabled = player.current.isAutoQualityMode();
+    const lowestQuality = player.current.getQualities().pop();
+    const currentQuality = player.current.getQuality();
 
-      if (enable && !isAbrEnabled) {
-        // Enable the Adaptive Bitrate (ABR) streaming algorithm
-        player.current.setAutoQualityMode(true);
-      }
+    if (enable && !isAbrEnabled) {
+      // Enable the Adaptive Bitrate (ABR) streaming algorithm
+      player.current.setAutoQualityMode(true);
+      console.log(
+        player.current.isAutoQualityMode() && `Player ${pid.current} ABR Enabled`
+      );
+    }
 
-      if (!enable && isAbrEnabled) {
-        // Disable the Adaptive Bitrate (ABR) streaming algorithm
-        const lowestQuality = player.current.getQualities().pop();
-        player.current.setQuality(lowestQuality);
+    if (!enable && (isAbrEnabled || currentQuality.name !== lowestQuality?.name)) {
+      // Disable the Adaptive Bitrate (ABR) streaming algorithm
+      // - if player is in READY state, then qualities must be available
+      // and the lowest quality is set. Otherwise, ABR is simply disabled.
+      if (lowestQuality) {
+        player.current.setQuality(lowestQuality, false);
+        console.log(
+          !player.current.isAutoQualityMode() &&
+            `Player ${pid.current} ABR Disabled with Lowest Quality: ${lowestQuality}`
+        );
+      } else {
+        player.current.setAutoQualityMode(false);
+        console.log(
+          !player.current.isAutoQualityMode() && `Player ${pid.current} ABR Disabled`
+        );
       }
     }
   };

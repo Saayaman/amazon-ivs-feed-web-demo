@@ -13,7 +13,7 @@ const Button = ({ children, onClick, ...otherProps }) => {
 
   return (
     <button className="button" onClick={!!onClick && clickHandler} {...otherProps}>
-      <Icon />
+      {Array.isArray(Icon) ? Icon : <Icon />}
     </button>
   );
 };

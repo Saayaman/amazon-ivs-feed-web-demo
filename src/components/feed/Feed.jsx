@@ -17,7 +17,6 @@ const Feed = ({ toggleMetadata }) => {
   const loadedStreamsMap = useMemo(() => new Map(), []); // key: Player ID (PID), value: loaded stream
   const activePlayer =
     (!!activeStream &&
-      !!loadedStreamsMap.size &&
       players.find(({ pid }) => loadedStreamsMap.get(pid)?.id === activeStream.id)) ||
     players[0];
 
@@ -30,11 +29,11 @@ const Feed = ({ toggleMetadata }) => {
       if (init.current) {
         players.forEach((player, i) => {
           const { id, stream } = streams[i];
+          const isStreamActive = id === activeStream.id;
+          player.preload(stream.playbackUrl, isStreamActive);
           loadedStreamsMap.set(player.pid, { id, ...stream });
-          player.preload(stream.playbackUrl);
         });
 
-        players[0].instance.play();
         init.current = false;
         return;
       }
@@ -43,22 +42,20 @@ const Feed = ({ toggleMetadata }) => {
       if (loadedStreamsMap.size) {
         players.forEach((player) => {
           const { id: loadedStreamId } = loadedStreamsMap.get(player.pid);
+          const isLoaded = (stream) => loadedStreamId === stream.id;
 
-          if (loadedStreamId === activeStream.id) {
+          if (isLoaded(activeStream)) {
+            player.setABR(true);
             player.instance.play();
-          } else if (
-            loadedStreamId === nextStream.id ||
-            loadedStreamId === prevStream.id
-          ) {
+          } else if (isLoaded(nextStream) || isLoaded(prevStream)) {
             player.instance.pause();
+            player.setABR(false);
           } else {
             const loadedStreamIds = [...loadedStreamsMap].map(([_, stream]) => stream.id);
             const { id, stream } = streams.find((s) => !loadedStreamIds.includes(s.id));
-            player.preload(stream.playbackUrl);
+            const isStreamActive = id === activeStream.id;
+            player.preload(stream.playbackUrl, isStreamActive);
             loadedStreamsMap.set(player.pid, { id, ...stream });
-            if (id === activeStream.id) {
-              player.instance.play();
-            }
           }
         });
       }
@@ -100,11 +97,19 @@ const Feed = ({ toggleMetadata }) => {
 
       <div className="player-video">
         {players.map(({ pid, video, canvas }) => {
-          const style = { display: pid === activePlayer.pid ? 'block' : 'none' };
+          const { PlayerState } = window.IVSPlayer;
+          const currentState = activePlayer.instance?.getState();
+
+          const isPlayerVisible = pid === activePlayer.pid;
+          const isCanvasVisible = isPlayerVisible && currentState !== PlayerState.READY;
+
+          const playerStyle = { display: isPlayerVisible ? 'block' : 'none' };
+          const canvasStyle = { display: isCanvasVisible ? 'block' : 'none' };
+
           return (
             <React.Fragment key={pid}>
-              <video ref={video} style={style} playsInline muted />
-              <canvas ref={canvas} style={style} />
+              <video ref={video} style={playerStyle} playsInline muted />
+              <canvas ref={canvas} style={canvasStyle} />
             </React.Fragment>
           );
         })}
