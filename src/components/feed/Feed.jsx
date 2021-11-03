@@ -25,15 +25,16 @@ const Feed = ({ toggleMetadata }) => {
     players[0];
 
   const init = useRef(true);
-  let executed = false;
+  const [executed, setExecuted] = useState(false);
 
   const handleWheel = (e) => {
+    console.log("handleWheel");
     playerWrapperRef.current.style.transition = "transform 650ms cubic-bezier(0.465, 0.183, 0.153, 0.946)";
     if(!executed) {
       if(e.deltaY > 0) {
         console.log("next", e.deltaY);
         playerWrapperRef.current.style.transform = "translateY(-200%)";
-        executed = true;
+        setExecuted(true);
         
         setTimeout(() => {
           gotoNextStream();
@@ -45,7 +46,7 @@ const Feed = ({ toggleMetadata }) => {
       } else {
         console.log("prev", e.deltaY);
         playerWrapperRef.current.style.transform = "translateY(0)";
-        executed = true;
+        setExecuted(true);
         setTimeout(() => {
           gotoPrevStream();
           if(!activePlayer.loading) {
@@ -55,8 +56,8 @@ const Feed = ({ toggleMetadata }) => {
         }, 650);
       }
     } else {
-      // console.log("executed NOT");
-      // executed = false;
+      console.log("executed NOT");
+      setExecuted(false);
     }
   }
   const onWheelThrottled = useMemo(() => throttle(handleWheel, 2000), [streams]);
