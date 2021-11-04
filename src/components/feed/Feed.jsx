@@ -2,10 +2,12 @@ import React, { useEffect, useRef, useMemo, useLayoutEffect } from 'react';
 
 import Spinner from '../common/Spinner';
 import Button from '../common/Button';
+import { Play } from '../../assets/icons';
 import Like from './like';
 
 import useStream from '../../contexts/Stream/useStream';
 import usePlayer from '../hooks/usePlayer';
+import useThrottledCallback from '../hooks/useThrottledCallback';
 
 import './Feed.css';
 
@@ -20,6 +22,9 @@ const Feed = ({ toggleMetadata }) => {
       players.find(({ pid }) => loadedStreamsMap.get(pid)?.id === activeStream.id)) ||
     players[0];
 
+  const throttledGotoNextStream = useThrottledCallback(gotoNextStream, 500);
+  const throttledGotoPrevStream = useThrottledCallback(gotoPrevStream, 500);
+
   const init = useRef(true);
   useLayoutEffect(() => {
     if (activeStream && nextStream && prevStream) {
@@ -27,6 +32,7 @@ const Feed = ({ toggleMetadata }) => {
 
       // init: preload players with initial streams
       if (init.current) {
+        console.log('INIT');
         players.forEach((player, i) => {
           const { id, stream } = streams[i];
           const isStreamActive = id === activeStream.id;
@@ -38,6 +44,8 @@ const Feed = ({ toggleMetadata }) => {
         return;
       }
 
+      console.log('TRANSITION');
+
       // transition players to the next preloaded state
       if (loadedStreamsMap.size) {
         players.forEach((player) => {
@@ -45,12 +53,18 @@ const Feed = ({ toggleMetadata }) => {
           const isLoaded = (stream) => loadedStreamId === stream.id;
 
           if (isLoaded(activeStream)) {
-            player.setABR(true);
+            player.log('Feed - Enabling ABR and Playing');
+
             player.instance.play();
+            player.setABR(true);
           } else if (isLoaded(nextStream) || isLoaded(prevStream)) {
+            player.log('Feed - Pausing and Disabling ABR');
+
             player.instance.pause();
             player.setABR(false);
           } else {
+            player.log('Feed - Preloading Player with new stream');
+
             const loadedStreamIds = [...loadedStreamsMap].map(([_, stream]) => stream.id);
             const { id, stream } = streams.find((s) => !loadedStreamIds.includes(s.id));
             const isStreamActive = id === activeStream.id;
@@ -65,12 +79,12 @@ const Feed = ({ toggleMetadata }) => {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.keyCode === 38) gotoPrevStream(); // keyCode 38 : 'ArrowUp'
-      if (e.keyCode === 40) gotoNextStream(); // keyCode 38 : 'ArrowDown'
+      if (e.keyCode === 38) throttledGotoPrevStream(); // keyCode 38 : 'ArrowUp'
+      if (e.keyCode === 40) throttledGotoNextStream(); // keyCode 38 : 'ArrowDown'
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [gotoNextStream, gotoPrevStream]);
+  }, [throttledGotoNextStream, throttledGotoPrevStream]);
 
   if (!window.IVSPlayer.isPlayerSupported) {
     console.warn('The current browser does not support the Amazon IVS player.');
@@ -86,8 +100,8 @@ const Feed = ({ toggleMetadata }) => {
         </Button>
 
         <hr className="divider" />
-        <Button onClick={gotoPrevStream}>ChevronUp</Button>
-        <Button onClick={gotoNextStream}>ChevronDown</Button>
+        <Button onClick={throttledGotoPrevStream}>ChevronUp</Button>
+        <Button onClick={throttledGotoNextStream}>ChevronDown</Button>
 
         <span className="metadata-toggle">
           <hr className="divider" />
@@ -96,28 +110,25 @@ const Feed = ({ toggleMetadata }) => {
       </div>
 
       <div className="player-video">
-        {players.map(({ pid, video, canvas }) => {
-          const { PlayerState } = window.IVSPlayer;
-          const currentState = activePlayer.instance?.getState();
-
-          const isPlayerVisible = pid === activePlayer.pid;
-          const isCanvasVisible = isPlayerVisible && currentState !== PlayerState.READY;
-
-          const playerStyle = { display: isPlayerVisible ? 'block' : 'none' };
-          const canvasStyle = { display: isCanvasVisible ? 'block' : 'none' };
+        {players.map(({ pid, video, canvas, log }) => {
+          const isVisible = { display: pid === activePlayer.pid ? 'block' : 'none' };
 
           return (
             <React.Fragment key={pid}>
-              <video ref={video} style={playerStyle} playsInline muted />
-              <canvas ref={canvas} style={canvasStyle} />
+              <video ref={video} style={isVisible} playsInline muted />
+              <canvas ref={canvas} style={isVisible} />
             </React.Fragment>
           );
         })}
 
         <Spinner loading={activePlayer.loading && !activePlayer.paused} />
 
-        <button className="btn-pause" onClick={activePlayer.togglePlayPause} tabIndex={1}>
-          {!activePlayer.loading && activePlayer.paused && <Button>Play</Button>}
+        <button
+          className="btn-play-pause"
+          onClick={activePlayer.togglePlayPause}
+          tabIndex={1}
+        >
+          {!activePlayer.loading && activePlayer.paused && <Play className="btn-play" />}
         </button>
       </div>
     </div>

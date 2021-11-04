@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import 'context-filter-polyfill';
 
 const { isPlayerSupported, create, PlayerState, PlayerEventType } = window.IVSPlayer;
@@ -6,11 +6,46 @@ const { isPlayerSupported, create, PlayerState, PlayerEventType } = window.IVSPl
 const usePlayer = (video) => {
   const player = useRef(null);
   const pid = useRef(video.current);
+  const canvas = useRef();
+  const startPlaybackAfterLoad = useRef(false);
+
   const [streamUrl, setStreamUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [muted, setMuted] = useState(true);
   const [paused, setPaused] = useState(false);
-  const canvas = useRef();
+
+  // Temporary
+  const log = (message) => {
+    console.log(`Player ${pid.current}: ${message}`);
+  };
+
+  const setABR = useCallback((enable) => {
+    log('setABR Triggered');
+
+    const isAbrEnabled = player.current.isAutoQualityMode();
+    const lowestQuality = player.current.getQualities().pop();
+    const currentQuality = player.current.getQuality();
+
+    if (enable && !isAbrEnabled) {
+      // Enable the Adaptive Bitrate (ABR) streaming algorithm
+      player.current.setAutoQualityMode(true);
+
+      player.current.isAutoQualityMode() && log('ABR Enabled');
+    }
+
+    if (!enable && (isAbrEnabled || currentQuality.name !== lowestQuality?.name)) {
+      // Disable the Adaptive Bitrate (ABR) streaming algorithm
+      if (lowestQuality) {
+        player.current.setQuality(lowestQuality, false);
+
+        log(`ABR Disabled with Lowest Quality: ${lowestQuality.name}`);
+      } else {
+        player.current.setAutoQualityMode(false);
+
+        log('ABR Disabled');
+      }
+    }
+  }, []);
 
   // handle case when autoplay with sound is blocked by browser
   useEffect(() => {
@@ -25,31 +60,29 @@ const usePlayer = (video) => {
       const isPlayerInitialized = !!player.current?.core;
       const currentState = isPlayerInitialized && player.current.getState();
 
+      log(`useEffect - currentState = ${currentState}`);
+
       const renderBlur = () => {
         const can = canvas.current;
         const ctx = can.getContext('2d');
         ctx.filter = 'blur(3px)';
 
         const draw = () => {
-          if (canvas.current) {
+          if (can && player.current.getState() !== READY) {
             ctx.drawImage(video.current, 0, 0, can.width, can.height);
             requestAnimationFrame(draw);
-          }
+          } else return;
         };
-
         requestAnimationFrame(draw);
       };
 
       const onStateChange = () => {
         const newState = player.current.getState();
-        setABR(newState !== READY);
         setLoading(newState !== PLAYING);
         setPaused(player.current.isPaused());
-
-        if (newState !== READY) {
+        if (newState === PLAYING) {
           renderBlur();
         }
-
         console.log(`Player ${pid.current} State - ${newState}`);
       };
 
@@ -57,16 +90,20 @@ const usePlayer = (video) => {
         console.warn(`Player ${pid.current} Event - ERROR:`, err);
       };
 
-      if (isPlayerInitialized && currentState !== PlayerState.READY) {
+      if (isPlayerInitialized && !player.current.core.isLoaded) {
+        log(
+          `Loading with stream ${streamUrl} - startPlaybackAfterLoad: ${startPlaybackAfterLoad.current}`
+        );
         player.current.load(streamUrl);
       } else {
-        console.log(`Creating Player ${pid.current}`);
+        log('CREATING New Player');
         video.current.removeAttribute('src'); // empty video source
         video.current.crossOrigin = 'anonymous';
 
         player.current = create();
         player.current.attachHTMLVideoElement(video.current);
         if (streamUrl) {
+          log(`Loading newly created Player with stream ${streamUrl}`);
           player.current.load(streamUrl);
         }
 
@@ -77,8 +114,19 @@ const usePlayer = (video) => {
         player.current.addEventListener(ERROR, onError);
       }
 
+      if (startPlaybackAfterLoad.current) {
+        log('usePlayer - Enabling ABR and Playing...');
+        player.current.play();
+      } else {
+        log('usePlayer - Pausing and Disabling ABR...');
+        player.current.pause();
+      }
+      setABR(startPlaybackAfterLoad.current);
+      startPlaybackAfterLoad.current = false;
+
       return () => {
-        if (player.current?.getState() === PlayerState.READY) {
+        if (player.current.core.isLoaded) {
+          log('TEARDOWN - Removing event listeners and deleting Player instance');
           player.current?.removeEventListener(READY, onStateChange);
           player.current?.removeEventListener(PLAYING, onStateChange);
           player.current?.removeEventListener(BUFFERING, onStateChange);
@@ -88,18 +136,12 @@ const usePlayer = (video) => {
         }
       };
     }
-  }, [video, streamUrl]);
+  }, [video, streamUrl, setABR]);
 
   const preload = (playbackUrl, startPlayback = false) => {
+    log(`Preloading... (Setting streamUrl state) - startPlayback = ${startPlayback}`);
     setStreamUrl(playbackUrl);
-
-    if (startPlayback) {
-      setABR(true);
-      player.current.play();
-    } else {
-      player.current.pause();
-      setABR(false);
-    }
+    startPlaybackAfterLoad.current = startPlayback;
   };
 
   const toggleMute = () => {
@@ -110,43 +152,13 @@ const usePlayer = (video) => {
 
   const togglePlayPause = () => {
     if (player.current.isPaused()) {
+      console.log('toggle play');
       player.current.play();
     } else {
+      console.log('toggle pause');
       player.current.pause();
     }
     setPaused(player.current.isPaused());
-  };
-
-  const setABR = (enable) => {
-    const isAbrEnabled = player.current.isAutoQualityMode();
-    const lowestQuality = player.current.getQualities().pop();
-    const currentQuality = player.current.getQuality();
-
-    if (enable && !isAbrEnabled) {
-      // Enable the Adaptive Bitrate (ABR) streaming algorithm
-      player.current.setAutoQualityMode(true);
-      console.log(
-        player.current.isAutoQualityMode() && `Player ${pid.current} ABR Enabled`
-      );
-    }
-
-    if (!enable && (isAbrEnabled || currentQuality.name !== lowestQuality?.name)) {
-      // Disable the Adaptive Bitrate (ABR) streaming algorithm
-      // - if player is in READY state, then qualities must be available
-      // and the lowest quality is set. Otherwise, ABR is simply disabled.
-      if (lowestQuality) {
-        player.current.setQuality(lowestQuality, false);
-        console.log(
-          !player.current.isAutoQualityMode() &&
-            `Player ${pid.current} ABR Disabled with Lowest Quality: ${lowestQuality}`
-        );
-      } else {
-        player.current.setAutoQualityMode(false);
-        console.log(
-          !player.current.isAutoQualityMode() && `Player ${pid.current} ABR Disabled`
-        );
-      }
-    }
   };
 
   return {
@@ -160,7 +172,8 @@ const usePlayer = (video) => {
     muted,
     preload,
     video,
-    canvas
+    canvas,
+    log
   };
 };
 

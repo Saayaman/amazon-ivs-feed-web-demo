@@ -39,6 +39,7 @@ const StreamMetadata = ({ toggleMetadata }) => {
     return () => {
       if (intervalId.current) pauseCounter();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startTime, timeSince]);
 
   const copyText = (url) => {
