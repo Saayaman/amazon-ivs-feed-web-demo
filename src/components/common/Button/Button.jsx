@@ -8,8 +8,10 @@ const Button = ({ children, onClick,  link, ...otherProps }) => {
   const Icon = Icons[children] || children;
 
   const clickHandler = (e) => {
-    e.stopPropagation();
-    onClick(e);
+    if (onClick) {
+      e.stopPropagation();
+      onClick(e);
+    }
   };
 
   if(!!link) {
@@ -18,7 +20,7 @@ const Button = ({ children, onClick,  link, ...otherProps }) => {
 
   return (
     <button className="button" onClick={!!onClick && clickHandler} {...otherProps}>
-      <Icon />
+      {Array.isArray(Icon) ? Icon : <Icon />}
     </button>
   );
 };

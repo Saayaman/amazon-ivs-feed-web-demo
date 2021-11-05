@@ -5,8 +5,11 @@ import {
   BrowserRouter as Router, Redirect, Route, Switch,
   useLocation
 } from "react-router-dom";
+
 import App from './App';
+import * as serviceWorker from './serviceWorker';
 import StreamProvider from './contexts/Stream/provider';
+
 import './index.css';
 import * as serviceWorker from './serviceWorker';
 const Routes = () => {
