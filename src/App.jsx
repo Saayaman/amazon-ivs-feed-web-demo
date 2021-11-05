@@ -4,6 +4,7 @@ import Feed from './components/feed';
 import StreamMetadata from './components/feed/stream-metadata';
 import useStream from './contexts/Stream/useStream';
 import { useParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 
 import './App.css';
 
@@ -38,14 +39,7 @@ const App = () => {
         isNaN(parseInt(params.id)) || params.id > streams.length - 1 ? 0 : params.id;
       setActiveStream(id);
     }
-  }, [streams]);
-
-  useEffect(() => {
-    if (activeStream && activeStream.id !== params.id) {
-      const obj = { Page: activeStream.id, Url: activeStream.id };
-      window.history.pushState(obj, obj.Page, obj.Url);
-    }
-  }, [activeStream]);
+  }, [streams, params.id]);
 
   useEffect(() => {
     const handleWindowResize = () => {
@@ -97,7 +91,13 @@ const App = () => {
   );
 
   return (
-    <div className="grid">
+    // <motion.div
+    //   className="grid"
+    //   initial={{ opacity: 0, y: "-100%" }}
+    //   animate={{ opacity: 1, y: 0 }}
+    //   exit={{ opacity: 0, y: "100%" }}
+    // >
+    <>
       <div className="feed">
         <Feed toggleMetadata={toggleMetadata} />
       </div>
@@ -106,7 +106,7 @@ const App = () => {
           <StreamMetadata toggleMetadata={toggleMetadata} />
         </div>
       )}
-    </div>
+      </>
   );
 };
 

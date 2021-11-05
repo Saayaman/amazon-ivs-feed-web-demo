@@ -1,30 +1,46 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import App from './App';
-import * as serviceWorker from './serviceWorker';
-
-import StreamProvider from './contexts/Stream/provider';
 import {
-  BrowserRouter as Router,
-  Route,
-  Redirect
+  BrowserRouter as Router, Redirect, Route, Switch,
+  useLocation
 } from "react-router-dom";
-
+import App from './App';
+import StreamProvider from './contexts/Stream/provider';
 import './index.css';
+import * as serviceWorker from './serviceWorker';
+const Routes = () => {
+  const location = useLocation();
 
-ReactDOM.render(
-  <React.StrictMode>
-    <Router>
-      <StreamProvider>
-       <Route exact path="/">
+  return (
+    <AnimatePresence>
+      <Switch location={location} key={location.pathname}>
+        <Route exact path="/">
           <Redirect to="/0" />
         </Route>
         <Route path="/:id">
-          <App />
+          <motion.div
+            className="grid"
+            initial={{ opacity: 0, y: "-100%" }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: "100%" }}
+          >
+            <App />
+          </motion.div>
         </Route>
-      </StreamProvider>
-    </Router>
-  </React.StrictMode>,
+      </Switch>
+    </AnimatePresence>
+  )
+}
+
+ReactDOM.render(
+  <React.StrictMode>
+      <Router>
+        <StreamProvider>
+          <Routes />
+        </StreamProvider>
+      </Router>
+    </React.StrictMode>,
   document.getElementById('root')
 );
 
