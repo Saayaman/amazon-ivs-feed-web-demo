@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo, useLayoutEffect } from 'react';
+import React, { useEffect, useRef, useMemo, useLayoutEffect, useCallback } from 'react';
 
 import Spinner from '../common/Spinner';
 import Button from '../common/Button';
@@ -32,44 +32,37 @@ const Feed = ({ toggleMetadata }) => {
 
       // init: preload players with initial streams
       if (init.current) {
-        console.log('INIT');
         players.forEach((player, i) => {
           const { id, stream } = streams[i];
-          const isStreamActive = id === activeStream.id;
-          player.preload(stream.playbackUrl, isStreamActive);
+          player.instance.load(stream.playbackUrl);
           loadedStreamsMap.set(player.pid, { id, ...stream });
         });
-
+        players[0].instance.play();
         init.current = false;
         return;
       }
-
-      console.log('TRANSITION');
 
       // transition players to the next preloaded state
       if (loadedStreamsMap.size) {
         players.forEach((player) => {
           const { id: loadedStreamId } = loadedStreamsMap.get(player.pid);
           const isLoaded = (stream) => loadedStreamId === stream.id;
-
           if (isLoaded(activeStream)) {
-            player.log('Feed - Enabling ABR and Playing');
-
             player.instance.play();
             player.setABR(true);
           } else if (isLoaded(nextStream) || isLoaded(prevStream)) {
-            player.log('Feed - Pausing and Disabling ABR');
-
             player.instance.pause();
             player.setABR(false);
           } else {
-            player.log('Feed - Preloading Player with new stream');
-
             const loadedStreamIds = [...loadedStreamsMap].map(([_, stream]) => stream.id);
             const { id, stream } = streams.find((s) => !loadedStreamIds.includes(s.id));
-            const isStreamActive = id === activeStream.id;
-            player.preload(stream.playbackUrl, isStreamActive);
+            player.instance.load(stream.playbackUrl);
             loadedStreamsMap.set(player.pid, { id, ...stream });
+
+            if (id === activeStream.id) {
+              // preloaded stream is active
+              player.instance.play();
+            }
           }
         });
       }
@@ -85,6 +78,27 @@ const Feed = ({ toggleMetadata }) => {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [throttledGotoNextStream, throttledGotoPrevStream]);
+
+  const blurredPlayerId = useRef(null);
+  const attachBlur = useCallback(
+    (canvas) => {
+      if (activePlayer && canvas) {
+        blurredPlayerId.current = activePlayer.pid;
+        const ctx = canvas.getContext('2d');
+        ctx.filter = 'blur(3px)';
+
+        const draw = (bid) => {
+          if (blurredPlayerId.current !== bid) return;
+
+          ctx.drawImage(activePlayer.video.current, 0, 0, canvas.width, canvas.height);
+          requestAnimationFrame(() => draw(bid));
+        };
+        requestAnimationFrame(() => draw(blurredPlayerId.current));
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activePlayer.pid]
+  );
 
   if (!window.IVSPlayer.isPlayerSupported) {
     console.warn('The current browser does not support the Amazon IVS player.');
@@ -110,16 +124,16 @@ const Feed = ({ toggleMetadata }) => {
       </div>
 
       <div className="player-video">
-        {players.map(({ pid, video, canvas, log }) => {
-          const isVisible = { display: pid === activePlayer.pid ? 'block' : 'none' };
-
-          return (
-            <React.Fragment key={pid}>
-              <video ref={video} style={isVisible} playsInline muted />
-              <canvas ref={canvas} style={isVisible} />
-            </React.Fragment>
-          );
-        })}
+        {players.map(({ pid, video }) => (
+          <video
+            key={pid}
+            ref={video}
+            style={{ display: pid === activePlayer.pid ? 'block' : 'none' }}
+            playsInline
+            muted
+          />
+        ))}
+        <canvas ref={attachBlur} />
 
         <Spinner loading={activePlayer.loading && !activePlayer.paused} />
 

@@ -6,7 +6,6 @@ const { isPlayerSupported, create, PlayerState, PlayerEventType } = window.IVSPl
 const usePlayer = (video) => {
   const player = useRef(null);
   const pid = useRef(video.current);
-  const canvas = useRef();
   const startPlaybackAfterLoad = useRef(false);
 
   const [streamUrl, setStreamUrl] = useState(null);
@@ -57,32 +56,11 @@ const usePlayer = (video) => {
     if (isPlayerSupported) {
       const { ENDED, PLAYING, READY, BUFFERING } = PlayerState;
       const { ERROR } = PlayerEventType;
-      const isPlayerInitialized = !!player.current?.core;
-      const currentState = isPlayerInitialized && player.current.getState();
-
-      log(`useEffect - currentState = ${currentState}`);
-
-      const renderBlur = () => {
-        const can = canvas.current;
-        const ctx = can.getContext('2d');
-        ctx.filter = 'blur(3px)';
-
-        const draw = () => {
-          if (can && player.current.getState() !== READY) {
-            ctx.drawImage(video.current, 0, 0, can.width, can.height);
-            requestAnimationFrame(draw);
-          } else return;
-        };
-        requestAnimationFrame(draw);
-      };
 
       const onStateChange = () => {
         const newState = player.current.getState();
         setLoading(newState !== PLAYING);
         setPaused(player.current.isPaused());
-        if (newState === PLAYING) {
-          renderBlur();
-        }
         console.log(`Player ${pid.current} State - ${newState}`);
       };
 
@@ -90,7 +68,7 @@ const usePlayer = (video) => {
         console.warn(`Player ${pid.current} Event - ERROR:`, err);
       };
 
-      if (isPlayerInitialized && !player.current.core.isLoaded) {
+      if (!player.current.core.isLoaded) {
         log(
           `Loading with stream ${streamUrl} - startPlaybackAfterLoad: ${startPlaybackAfterLoad.current}`
         );
@@ -138,12 +116,6 @@ const usePlayer = (video) => {
     }
   }, [video, streamUrl, setABR]);
 
-  const preload = (playbackUrl, startPlayback = false) => {
-    log(`Preloading... (Setting streamUrl state) - startPlayback = ${startPlayback}`);
-    setStreamUrl(playbackUrl);
-    startPlaybackAfterLoad.current = startPlayback;
-  };
-
   const toggleMute = () => {
     const muteNext = !player.current.isMuted();
     player.current.setMuted(muteNext);
@@ -166,13 +138,10 @@ const usePlayer = (video) => {
     pid: pid.current,
     togglePlayPause,
     toggleMute,
-    setABR,
     loading,
     paused,
     muted,
-    preload,
     video,
-    canvas,
     log
   };
 };
