@@ -2,7 +2,6 @@ import { useEffect, useRef, useCallback } from 'react';
 import throttle from 'lodash.throttle';
 import 'context-filter-polyfill';
 
-import PlayerControls from './PlayerControls';
 import Spinner from '../../common/Spinner';
 import { Play } from '../../../assets/icons';
 
@@ -16,7 +15,6 @@ import './Player.css';
  * @param {string} type 'ACTIVE' | 'NEXT' | 'PREV'
  * @param {string} playbackUrl stream URL to load into the player for playback
  * @param {function isPlayerActive(HTMLVideoElement): boolean} isPlayerActive true if type is 'ACTIVE' and player's attached HTML video element is in viewport; false otherwise
- * @param {function toggleMetadata(): void} toggleMetadata toggles metadata panel in mobile view
  */
 const Player = ({
   id,
@@ -25,21 +23,11 @@ const Player = ({
   playbackUrl,
   isPlayerActive,
   isPlayerVisible,
-  toggleMetadata,
-  setSwipeDirection
+  setActivePlayer
 }) => {
-  const {
-    pid,
-    video,
-    load,
-    muted,
-    paused,
-    loading,
-    toggleMute,
-    play,
-    pause,
-    togglePlayPause
-  } = usePlayer(id);
+  const player = usePlayer(id);
+  const { pid, video, load, paused, loading, play, pause, togglePlayPause } = player;
+
   const isActive = useRef(isPlayerActive);
   const isVisible = useRef(isPlayerVisible);
   const canvas = useRef();
@@ -48,10 +36,18 @@ const Player = ({
     isActive.current = isPlayerActive;
     isVisible.current = isPlayerVisible;
     isActive.current ? play() : pause();
+
     if (blur.enabled && isActive.current && !isBlurring.current) {
       attachBlur(canvas.current);
     }
   }, [isPlayerActive, isPlayerVisible]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (isPlayerActive && isPlayerVisible) {
+      setActivePlayer(player);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlayerActive, isPlayerVisible, player.muted]);
 
   const firstLoad = useRef(true);
   useEffect(() => {
@@ -110,24 +106,16 @@ const Player = ({
   );
 
   return (
-    <div id={`${type.toLowerCase()}-player-${pid}`} className="player-container">
-      <PlayerControls
-        muted={muted}
-        toggleMute={toggleMute}
-        toggleMetadata={toggleMetadata}
-        setSwipeDirection={setSwipeDirection}
-      />
-      <div className="player-video">
-        <video id={`${type.toLowerCase()}-video`} ref={video} playsInline muted />
-        <canvas id={`${type.toLowerCase()}-blur`} ref={canvas} />
+    <div id={`${type.toLowerCase()}-player-${pid}`} className="player-video">
+      <video id={`${type.toLowerCase()}-video`} ref={video} playsInline muted />
+      <canvas id={`${type.toLowerCase()}-blur`} ref={canvas} />
 
-        <Spinner loading={loading && !paused} />
-        <div
-          className={`btn-play-pause ${isActive.current ? 'active' : ''}`}
-          onClick={() => togglePlayPause()}
-        >
-          {!loading && paused && isActive.current && <Play className="btn-play" />}
-        </div>
+      <Spinner loading={loading && !paused} />
+      <div
+        className={`btn-play-pause ${isActive.current ? 'active' : ''}`}
+        onClick={() => togglePlayPause()}
+      >
+        {!loading && paused && isActive.current && <Play className="btn-play" />}
       </div>
     </div>
   );
